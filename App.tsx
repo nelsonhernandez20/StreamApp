@@ -1,117 +1,109 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
+  useColorScheme,
 } from 'react-native';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
-
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
-
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
-
-function App(): React.JSX.Element {
+const App = () => {
+  const [responseText, setResponseText] = useState('');
   const isDarkMode = useColorScheme() === 'dark';
 
   const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+    backgroundColor: isDarkMode ? 'white' : 'white',
   };
+
+  useEffect(() => {
+    const data = {
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'user',
+          content: 'Cuentame un chiste largo',
+        },
+      ],
+      stream: true,
+      max_tokens: 60,
+    };
+
+    fetch('https://api.openai.com/v1/chat/completions', {
+      reactNative: {textStreaming: true},
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization:
+          'Bearer YOUR_API_KEY',
+      },
+      body: JSON.stringify(data),
+    })
+      .then(response => {
+        const reader = response.body.getReader();
+
+        // Función para leer cada chunk del stream
+        function read() {
+          return reader.read().then(({done, value}) => {
+            if (done) {
+              console.log('Stream completo');
+              return;
+            }
+            const textChunk = new TextDecoder('utf-8').decode(value);
+            console.log(textChunk, 'cada chunk');
+            for (const obj of extraerDatos(textChunk)) {
+              // const data = limpiarYConvertir(obj); // Ahora se imprimirá cada objeto JSON
+              if (obj.choices[0].delta.content !== undefined) {
+                const data = obj.choices[0].delta.content;
+                setResponseText(prevText => prevText + data);
+              }
+            }
+            return read(); // Llama a read() recursivamente hasta que el stream se complete
+          });
+        }
+
+        return read(); // Comienza a leer el stream
+      })
+      .catch(error =>
+        console.error('Error al solicitar la API de GPT-3.5 Turbo:', error),
+      );
+  }, []);
+
+  function* extraerDatos(inputString) {
+    const dataRegex = /data: \{.*?\}(?=\s|$)/g;
+    const matches = inputString.match(dataRegex);
+
+    if (matches) {
+      for (const match of matches) {
+        const jsonPart = match.slice(6);
+        try {
+          const dataObject = JSON.parse(jsonPart);
+          yield dataObject;
+        } catch (error) {
+          console.error('Error parsing JSON:', error);
+        }
+      }
+    }
+  }
 
   return (
     <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
+        <Text style={styles.responseText}>{responseText}</Text>
       </ScrollView>
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
+  responseText: {
+    fontSize: 16,
+    color: 'black',
+    padding: 20,
   },
 });
 
